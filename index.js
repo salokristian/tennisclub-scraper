@@ -75,6 +75,26 @@ async function getAvailableGroups(page) {
   return availableGroups;
 }
 
+async function sendToTelegram(replacementGroups) {
+  if (replacementGroups.length == 0) {
+    return;
+  }
+
+  const token = process.env.TELEGRAM_TOKEN;
+
+  const groupText = replacementGroups
+    .map((group) => `${group.timeAndLocation}\n${group.players}`)
+    .join('\n\n');
+  const text = `Moro! Taas olis uusia ryhmiä:)\n\n${groupText}`;
+
+  const params = new URLSearchParams({
+    chat_id: process.env.TELEGRAM_CHAT_ID,
+    text,
+  });
+
+  await fetch(`https://api.telegram.org/bot${token}/sendMessage?${params}`);
+}
+
 async function main() {
   const browser = await puppeteer.launch({ headless: false }); // TODO: switch to headless
   const page = await browser.newPage();
@@ -111,7 +131,7 @@ async function main() {
     ...smashEspooGroups,
     ...smashHelsinkiGroups,
   ];
-  console.log(allGroups);
+  await sendToTelegram(allGroups);
 
   await browser.close();
 }
