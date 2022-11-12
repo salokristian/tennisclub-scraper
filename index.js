@@ -1,4 +1,5 @@
 import puppeteer from 'puppeteer';
+import * as constants from './constants.js';
 
 async function waitAndClick(page, selector) {
   await page.waitForSelector(selector);
@@ -26,22 +27,30 @@ async function switchToClub(page, club) {
   await page.click('.btn-primary');
 
   await page.waitForNetworkIdle({ idleTime: 2000 });
-}
 
-async function getAvailableGroups(page) {
-  // After switching clubs we need to load to group view twice, and visit some other page in
-  // between. The first load always only displays 'Korvausjärjestelmä ei ole käytössä
-  // valmennustasoillasi.'
+  // After switching clubs we need to load the replacement page and some other page to make
+  // replacement options visible. Otherwise we'll only get 'Korvausjärjestelmä ei ole käytössä
+  // valmennustasoillasi.' text. This seems to be a bug with tennisclub.
   await page.goto('https://tennisclub.fi/pelaaja/kj-store/search');
   await page.waitForNetworkIdle({ idleTime: 500 });
   await page.goto('https://tennisclub.fi/pelaaja/group/index');
   await page.waitForNetworkIdle({ idleTime: 500 });
+}
+
+async function switchReplacementLocation(page, locationOption) {
+  await page.goto('https://tennisclub.fi/pelaaja/kj-store/list');
+  await page.waitForNetworkIdle({ idleTime: 500 });
+  await page.select('select[name="level_id"]', locationOption);
+  await page.waitForNetworkIdle({ idleTime: 500 });
+}
+
+async function getAvailableGroups(page) {
   await page.goto('https://tennisclub.fi/pelaaja/kj-store/search');
   await page.waitForNetworkIdle({ idleTime: 500 });
 
   const availableWeeks = await page.evaluate(() =>
     Array.from(
-      document.querySelector('select[name="date_monday"]').children
+      document.querySelector('select[name="date_monday"]')?.children ?? []
     ).map((optionElement) => optionElement.value)
   );
 
@@ -67,7 +76,7 @@ async function getAvailableGroups(page) {
 }
 
 async function main() {
-  const browser = await puppeteer.launch({ headless: false });
+  const browser = await puppeteer.launch({ headless: false }); // TODO: switch to headless
   const page = await browser.newPage();
 
   await page.goto('https://tennisclub.fi');
@@ -90,9 +99,18 @@ async function main() {
   const kirteGroups = await getAvailableGroups(page);
 
   await switchToClub(page, 'smash');
-  const smashGroups = await getAvailableGroups(page);
 
-  const allGroups = [...kirteGroups, ...smashGroups];
+  await switchReplacementLocation(page, constants.smashEspooLocationOption);
+  const smashEspooGroups = await getAvailableGroups(page);
+
+  await switchReplacementLocation(page, constants.smashHelsinkiLocationOption);
+  const smashHelsinkiGroups = await getAvailableGroups(page);
+
+  const allGroups = [
+    ...kirteGroups,
+    ...smashEspooGroups,
+    ...smashHelsinkiGroups,
+  ];
   console.log(allGroups);
 
   await browser.close();
