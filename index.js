@@ -1,3 +1,5 @@
+import * as fs from 'fs/promises';
+import path from 'path';
 import puppeteer from 'puppeteer';
 import * as constants from './constants.js';
 
@@ -95,8 +97,35 @@ async function sendToTelegram(replacementGroups) {
   await fetch(`https://api.telegram.org/bot${token}/sendMessage?${params}`);
 }
 
+async function removeSeenGroups(groups) {
+  const fileName = path.join(process.cwd(), 'latestGroups.json');
+  const groupsFile = await fs.readFile(fileName, {
+    encoding: 'utf8',
+  });
+
+  const seenGroups = JSON.parse(groupsFile);
+
+  return groups.filter(
+    (group) =>
+      !seenGroups.some(
+        (seenGroup) =>
+          seenGroup.timeAndLocation === group.timeAndLocation &&
+          seenGroup.players === group.players
+      )
+  );
+}
+
+async function saveGroupsToFile(groups) {
+  const fileName = path.join(process.cwd(), 'latestGroups.json');
+  await fs.writeFile(fileName, JSON.stringify(groups), {
+    encoding: 'utf8',
+  });
+}
+
 async function main() {
-  const browser = await puppeteer.launch({ headless: false }); // TODO: switch to headless
+  console.log('Looking for new replacement groups');
+
+  const browser = await puppeteer.launch();
   const page = await browser.newPage();
 
   await page.goto('https://tennisclub.fi');
@@ -126,14 +155,24 @@ async function main() {
   await switchReplacementLocation(page, constants.smashHelsinkiLocationOption);
   const smashHelsinkiGroups = await getAvailableGroups(page);
 
+  await browser.close();
+
   const allGroups = [
     ...kirteGroups,
     ...smashEspooGroups,
     ...smashHelsinkiGroups,
   ];
-  await sendToTelegram(allGroups);
 
-  await browser.close();
+  const newGroups = await removeSeenGroups(allGroups);
+  if (0 < newGroups.length) {
+    await sendToTelegram(newGroups);
+  }
+
+  console.log(
+    `Found ${allGroups.length} groups, ${newGroups.length} of which were new.`
+  );
+
+  await saveGroupsToFile(allGroups);
 }
 
 await main();
