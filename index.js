@@ -8,6 +8,24 @@ async function waitAndClick(page, selector) {
   await page.click(selector);
 }
 
+async function login(page) {
+  await page.goto('https://tennisclub.fi');
+
+  const playerButtonSelector = 'a[href="/pelaaja"]';
+  await waitAndClick(page, playerButtonSelector);
+
+  await page.waitForSelector('#loginformfront-username');
+  await page.type('#loginformfront-username', process.env.USERNAME, {
+    delay: 50,
+  });
+  await page.type('#loginformfront-password', process.env.PASSWORD, {
+    delay: 50,
+  });
+  await page.click('.btn-success');
+
+  await page.waitForNetworkIdle({ idleTime: 2000 });
+}
+
 function getDataFromGroupText(groupText) {
   const [, timeAndLocationRaw, playersRaw] = groupText.split('\n');
   const [, timeAndLocation] = timeAndLocationRaw.match(/\s*(.*)varaa/);
@@ -15,16 +33,10 @@ function getDataFromGroupText(groupText) {
   return { timeAndLocation, players };
 }
 
-async function switchToClub(page, club) {
-  const clubToOptionValue = {
-    kirte: '3071031',
-    smash: '3068439',
-  };
-
+async function switchToClub(page, clubOptionValue) {
   await page.goto('https://tennisclub.fi/pelaaja/site/user-club');
 
-  const optionValue = clubToOptionValue[club];
-  await page.select('#selectclubform-person_id', optionValue);
+  await page.select('#selectclubform-person_id', clubOptionValue);
 
   await page.click('.btn-primary');
 
@@ -128,26 +140,12 @@ async function main() {
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
 
-  await page.goto('https://tennisclub.fi');
+  await login(page);
 
-  const playerButtonSelector = 'a[href="/pelaaja"]';
-  await waitAndClick(page, playerButtonSelector);
-
-  await page.waitForSelector('#loginformfront-username');
-  await page.type('#loginformfront-username', process.env.USERNAME, {
-    delay: 50,
-  });
-  await page.type('#loginformfront-password', process.env.PASSWORD, {
-    delay: 50,
-  });
-  await page.click('.btn-success');
-
-  await page.waitForNetworkIdle({ idleTime: 2000 });
-
-  await switchToClub(page, 'kirte');
+  await switchToClub(page, constants.kirteClubOptionValue);
   const kirteGroups = await getAvailableGroups(page);
 
-  await switchToClub(page, 'smash');
+  await switchToClub(page, constants.smashEspooClubOptionValue);
 
   await switchReplacementLocation(page, constants.smashEspooLocationOption);
   const smashEspooGroups = await getAvailableGroups(page);
